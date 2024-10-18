@@ -1,0 +1,128 @@
+@isTest
+private class OpportunityClosingBatchTest {
+
+    @isTest
+    static void testOpportunityClosingBatch_Threshold() {
+        //Test data Set up 
+        decimal Threshold_Amount = decimal.valueOf(Label.Threshold_Amount);
+      
+        List<Opportunity> OppList = new List<Opportunity>();
+        
+        // Test opp1 : Amount > Threshold_Amount 
+        Opportunity opp1 = new Opportunity(Name = 'TestOpp1',Amount = Threshold_Amount + 1000,
+                         CloseDate = Date.today().addDays(30), StageName = 'Prospecting');  
+        
+        OppList.add(opp1); 
+      
+        // Test opp2 : Amount < Threshold_Amount 
+         Opportunity opp2 = new Opportunity(Name = 'TestOpp2',Amount = Threshold_Amount - 1000,
+                         CloseDate = Date.today().addDays(30), StageName = 'Prospecting');  
+        
+         OppList.add(opp2);  
+         
+         // Test opp3 : Amount = Threshold_Amount 
+         Opportunity opp3 = new Opportunity(Name = 'TestOpp2',Amount = Threshold_Amount,
+                         CloseDate = Date.today().addDays(30), StageName = 'Prospecting');  
+        
+         OppList.add(opp3); 
+            
+         //Insert all Test Opps
+         insert OppList;
+
+        //Execute the batch
+        Test.startTest();
+        OpportunityClosingBatch batch = new OpportunityClosingBatch();
+        Database.executeBatch(batch);
+        Test.stopTest();
+
+        //Fetch updated records after batch is run
+        List<Opportunity> updatedOpps = [SELECT Id, StageName, Name FROM Opportunity WHERE Id IN :OppList];
+        
+        //Assert statements to verify the exepected results
+        for (Opportunity opp : updatedOpps) {
+            if(opp.Name == 'TestOpp1')
+                System.assertEquals('Closing', opp.StageName, 'Stage Updated to Closing');
+            else if(opp.Name == 'TestOpp2')
+                System.assertEquals('Prospecting', opp.StageName, 'No Stage change');
+            else if(opp.Name == 'TestOpp3')
+                System.assertEquals('Prospecting', opp.StageName, 'No Stage change');
+            
+        }      
+    }
+    
+    
+    @isTest
+    static void testOpportunityClosingBatch_CloseDate() {
+        //Test data Set up 
+        decimal Threshold_Amount = decimal.valueOf(Label.Threshold_Amount);
+
+        List<Opportunity> OppList = new List<Opportunity>();
+        
+        // Test opp1 : CloseDate exactly on 30th day
+        Opportunity opp1 = new Opportunity(Name = 'TestOpp1',Amount = Threshold_Amount + 1000,
+                         CloseDate = Date.today().addDays(30), StageName = 'Prospecting');  
+        
+        OppList.add(opp1); 
+      
+        // Test opp2 : CloseDate after 30 days
+         Opportunity opp2 = new Opportunity(Name = 'TestOpp2',Amount = Threshold_Amount + 1000,
+                         CloseDate = Date.today().addDays(40), StageName = 'Prospecting');  
+        
+         OppList.add(opp2);  
+         
+         // Test opp3 : CloseDate within 30 days
+         Opportunity opp3 = new Opportunity(Name = 'TestOpp3',Amount = Threshold_Amount + 1000,
+                         CloseDate = Date.today().addDays(10), StageName = 'Prospecting');  
+        
+         OppList.add(opp3);    
+         
+         insert OppList;
+
+        //Execute the batch
+        Test.startTest();
+        OpportunityClosingBatch batch = new OpportunityClosingBatch();
+        Database.executeBatch(batch);
+        Test.stopTest();
+
+        //Fetch updated records after batch is run
+        List<Opportunity> updatedOpps = [SELECT Id, StageName, Name FROM Opportunity WHERE Id IN :OppList];
+        
+        //Assert statements to verify the exepected results
+        for (Opportunity opp : updatedOpps) {
+            if(opp.Name == 'TestOpp1')
+                System.assertEquals('Closing', opp.StageName, 'Stage Updated to Closing');
+            else if(opp.Name == 'TestOpp2')
+                System.assertEquals('Prospecting', opp.StageName, 'No Stage change');
+            else if(opp.Name == 'TestOpp3')
+                System.assertEquals('Closing', opp.StageName, 'Stage Updated to Closing');
+            
+        }      
+    }
+    
+    
+
+    @isTest
+    static void testOpportunityClosingBatch_NoOpps() {
+        
+        //Test data Set up 
+        decimal Threshold_Amount = decimal.valueOf(Label.Threshold_Amount);
+        
+        // Test opp1 : CloseDate after 30 days - not meeting criteria
+        Opportunity opp1 = new Opportunity(Name = 'TestOpp1',Amount = Threshold_Amount,
+                         CloseDate = Date.today().addDays(40), StageName = 'Prospecting');  
+        
+        insert opp1;
+
+        //Execute the batch
+        Test.startTest();
+        OpportunityClosingBatch schedulableJob = new OpportunityClosingBatch();
+        schedulableJob.execute(null);
+        Test.stopTest();
+         
+        //Fetch updated records after batch is run             
+        Opportunity updatedOpp = [SELECT Id, StageName FROM Opportunity WHERE Id = :opp1.Id];
+        
+        //Assert statement to verify the exepected result
+        System.assertEquals('Prospecting', opp1.StageName, 'No Stage change');
+    }
+}
