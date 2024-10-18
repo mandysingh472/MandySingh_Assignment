@@ -1,0 +1,62 @@
+global class OpportunityClosingBatch implements Database.Batchable<SObject>, Schedulable{
+
+    //Schedulable Job Execute Method
+    global void execute(SchedulableContext SC) {
+       //Execute Batch job
+        OpportunityClosingBatch oppBatch = new OpportunityClosingBatch();
+        Database.executeBatch(oppBatch);
+    }
+
+    //Batchable Job Start Method
+    global Database.QueryLocator start(Database.BatchableContext BC) {
+       //Fetching pre-configured Threshold Amount from custom label
+       decimal ThresholdAmt = decimal.valueOf(Label.Threshold_Amount);
+      
+      //Fetch Opportunities wherein closedate within next 30 days and Amount > Threshold Amount
+      // and status not already Closing
+        return Database.getQueryLocator([
+            Select Id, Amount, closeDate, StageName
+            from Opportunity Where
+            StageName <> 'Closing'
+            and CloseDate >= :Date.today()
+            and CloseDate <= :Date.today().addDays(30)
+            and Amount > :ThresholdAmt 
+        ]);
+    }
+
+
+    //Batchable Job Execute Method
+    global void execute(Database.BatchableContext BC, List<Opportunity> scope) {
+        List<Opportunity> oppsToUpd = new List<Opportunity>();
+        
+        //Exception handling
+        Try{
+            //Updating Stage to Closing for all the Opps meeting the criteria 
+            for(Opportunity opp : scope) {
+                opp.StageName = 'Closing';
+                oppsToUpd.add(opp);
+            }
+            
+            if (!oppsToUpd.isEmpty()) {
+                //database.update with allOrNone  parameter as false for partial update in case of failures
+                Database.SaveResult[] oppResult = Database.update(oppsToUpd, false);
+
+                //traversing the returned result list
+                for (Integer i = 0; i < oppResult.size(); i++) {
+                    //Adding debug for failed records, custom logging can be implemented too
+                    if (!oppResult[i].isSuccess()) {
+                        System.debug('Failed to update Opportunity: ' + oppsToUpd[i].Id + 
+                                     ' Error: ' + oppResult[i].getErrors()[0].getMessage());
+                    }
+                }
+            }
+        }Catch(Exception exc){
+             System.debug('Error in Batch OpportunityClosingBatch' + exc.getMessage());
+        }
+    }
+    
+    //Batchable Job Finish Method
+    global void finish(Database.BatchableContext BC) {
+        System.debug('OpportunityClosingBatch completed successfully!');
+    }
+}
